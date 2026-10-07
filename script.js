@@ -2,6 +2,7 @@
 const MAX_RADIUS_MM = 75;
 const RECOMMENDED_RADIUS_MM = 60;
 const DIE_COUNT = 9;
+const SNAP_DISTANCE_MM = 1;
 
 const stage = document.getElementById('stage');
 const wafer = document.getElementById('wafer');
@@ -20,8 +21,8 @@ const invalidCountEl = document.getElementById('invalidCount');
 const layoutStatusEl = document.getElementById('layoutStatus');
 
 const defaultSizes = [
-  [20, 10], [18, 12], [22, 14], [16, 10], [20, 16],
-  [14, 14], [24, 10], [18, 13], [21, 12]
+  [40.5, 33.24], [35.25, 42.64], [41, 33.98], [41, 51.93], [30, 25.45],
+  [30, 24.73], [41, 31.90], [25.27, 20.92], [30.32, 24]
 ];
 
 let selectedId = null;
@@ -59,11 +60,11 @@ function initSettings() {
       <strong>D${i + 1}</strong>
       <div class="field">
         <label>Width (mm)</label>
-        <input data-id="${i + 1}" data-dim="width" type="number" min="1" max="150" step="0.1" value="${defaultSizes[i][0]}">
+        <input data-id="${i + 1}" data-dim="width" type="number" min="1" max="150" step="0.01" value="${defaultSizes[i][0]}">
       </div>
       <div class="field">
         <label>Height (mm)</label>
-        <input data-id="${i + 1}" data-dim="height" type="number" min="1" max="150" step="0.1" value="${defaultSizes[i][1]}">
+        <input data-id="${i + 1}" data-dim="height" type="number" min="1" max="150" step="0.01" value="${defaultSizes[i][1]}">
       </div>
     `;
     dieSettings.appendChild(row);
@@ -131,7 +132,7 @@ function arrangeTray() {
 
 function renderDie(die, trayScale = !die.placed) {
   const { pxPerMm } = getWaferMetrics();
-  const scale = trayScale ? Math.min(pxPerMm, 3.0) : pxPerMm;
+  const scale = trayScale ? Math.min(pxPerMm, 1.5) : pxPerMm;
   const wPx = die.width * scale;
   const hPx = die.height * scale;
 
@@ -168,9 +169,9 @@ function updateSelectedPanel() {
     const { cx, cy, pxPerMm } = getWaferMetrics();
     const xMm = (die.x - cx) / pxPerMm;
     const yMm = -(die.y - cy) / pxPerMm;
-    selectedMeta.textContent = `${die.width.toFixed(1)} × ${die.height.toFixed(1)} mm • x ${xMm.toFixed(1)} mm • y ${yMm.toFixed(1)} mm • ${die.rotation}°`;
+    selectedMeta.textContent = `${die.width.toFixed(2)} × ${die.height.toFixed(2)} mm • x ${xMm.toFixed(1)} mm • y ${yMm.toFixed(1)} mm • ${die.rotation}°`;
   } else {
-    selectedMeta.textContent = `${die.width.toFixed(1)} × ${die.height.toFixed(1)} mm • in tray • ${die.rotation}°`;
+    selectedMeta.textContent = `${die.width.toFixed(2)} × ${die.height.toFixed(2)} mm • in tray • ${die.rotation}°`;
   }
 }
 
@@ -201,6 +202,7 @@ function onPointerMove(e) {
   dragState.die.x = e.clientX - stageRect.left - dragState.offsetX;
   dragState.die.y = e.clientY - stageRect.top - dragState.offsetY;
   dragState.die.placed = !pointInTray(dragState.die.x, dragState.die.y);
+  snapDieToNeighbors(dragState.die);
   renderDie(dragState.die);
   evaluateLayout();
   updateSelectedPanel();
@@ -218,6 +220,7 @@ function onPointerUp(e) {
   if (!die.placed) {
     arrangeTray();
   } else {
+    snapDieToNeighbors(die);
     renderDie(die);
   }
 
@@ -229,6 +232,51 @@ function onPointerUp(e) {
 function pointInTray(x, y) {
   const r = getTrayRectRelative();
   return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+}
+
+function snapDieToNeighbors(die) {
+  if (!die.placed) return;
+
+  const { pxPerMm } = getWaferMetrics();
+  const snapDistance = SNAP_DISTANCE_MM * pxPerMm;
+  const rotated = die.rotation % 180 !== 0;
+  const halfWidth = (rotated ? die.height : die.width) * pxPerMm / 2;
+  const halfHeight = (rotated ? die.width : die.height) * pxPerMm / 2;
+  let bestX = snapDistance;
+  let bestY = snapDistance;
+  let snappedX = die.x;
+  let snappedY = die.y;
+
+  dies.forEach(other => {
+    if (!other.placed || other.id === die.id) return;
+
+    const otherRotated = other.rotation % 180 !== 0;
+    const combinedHalfWidth = halfWidth + (otherRotated ? other.height : other.width) * pxPerMm / 2;
+    const combinedHalfHeight = halfHeight + (otherRotated ? other.width : other.height) * pxPerMm / 2;
+
+    if (Math.abs(die.y - other.y) < combinedHalfHeight) {
+      for (const targetX of [other.x - combinedHalfWidth, other.x + combinedHalfWidth]) {
+        const distance = Math.abs(die.x - targetX);
+        if (distance < bestX) {
+          bestX = distance;
+          snappedX = targetX;
+        }
+      }
+    }
+
+    if (Math.abs(die.x - other.x) < combinedHalfWidth) {
+      for (const targetY of [other.y - combinedHalfHeight, other.y + combinedHalfHeight]) {
+        const distance = Math.abs(die.y - targetY);
+        if (distance < bestY) {
+          bestY = distance;
+          snappedY = targetY;
+        }
+      }
+    }
+  });
+
+  die.x = snappedX;
+  die.y = snappedY;
 }
 
 function getDieCornersMm(die) {
