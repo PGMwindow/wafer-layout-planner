@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wafer Layout Game</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h1>Wafer Layout Game</h1>
+      <p>Arrange D1–D9 inside the wafer area.</p>
+    </div>
+    <div class="legend">
+      <span><i class="dot recommended"></i> Recommended: R ≤ 60 mm</span>
+      <span><i class="dot extended"></i> Allowed: 60–75 mm</span>
+      <span><i class="dot invalid"></i> Invalid: outside R = 75 mm / overlap</span>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <aside class="controls">
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Die size settings</h2>
+          <button id="resetAllBtn" class="secondary-btn">Reset all</button>
+        </div>
+        <p class="hint">Units are millimetres. Changes update the die immediately.</p>
+        <div id="dieSettings" class="die-settings"></div>
+      </section>
+
+      <section class="panel status-panel">
+        <h2>Layout status</h2>
+        <div id="layoutStatus" class="status-badge">Ready</div>
+        <div class="summary-grid">
+          <div><span>Placed</span><strong id="placedCount">0 / 9</strong></div>
+          <div><span>Recommended</span><strong id="recommendedCount">0</strong></div>
+          <div><span>Extended</span><strong id="extendedCount">0</strong></div>
+          <div><span>Invalid</span><strong id="invalidCount">0</strong></div>
+        </div>
+      </section>
+    </aside>
+
+    <section class="workspace-card">
+      <div class="toolbar">
+        <div>
+          <strong id="selectedLabel">Selected: none</strong>
+          <span id="selectedMeta">Click a die to select it.</span>
+        </div>
+        <div class="toolbar-actions">
+          <button id="rotateBtn" disabled>Rotate 90°</button>
+          <button id="sendToTrayBtn" class="secondary-btn" disabled>Move to tray</button>
+        </div>
+      </div>
+
+      <div id="stage" class="stage">
+        <div class="wafer-zone">
+          <div id="wafer" class="wafer">
+            <div class="recommended-circle"></div>
+            <div class="crosshair horizontal"></div>
+            <div class="crosshair vertical"></div>
+            <div class="wafer-label label-60">R = 60 mm</div>
+            <div class="wafer-label label-75">R = 75 mm max</div>
+          </div>
+        </div>
+
+        <div id="tray" class="tray">
+          <h3>Die tray</h3>
+          <p>Drag D1–D9 onto the wafer.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Drag • Rotate in 90° steps • Edit D1–D9 dimensions • Real-time boundary & overlap checking</span>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
