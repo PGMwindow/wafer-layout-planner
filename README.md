@@ -9,7 +9,7 @@ A simple browser-based wafer layout planner designed for GitHub Pages.
 - Drag dies from the tray onto the wafer
 - Snap die edges together when they are within 1 mm
 - Rotate the selected die in 90° steps
-- Recommended placement radius: 60 mm
+- Recommended placement radius: 67 mm
 - Maximum allowed radius: 75 mm
 - Real-time boundary checking
 - Real-time die-to-die overlap detection

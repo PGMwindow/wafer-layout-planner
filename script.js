@@ -1,6 +1,6 @@
 
 const MAX_RADIUS_MM = 75;
-const RECOMMENDED_RADIUS_MM = 60;
+const RECOMMENDED_RADIUS_MM = 67;
 const DIE_COUNT = 9;
 const SNAP_DISTANCE_MM = 1;
 
@@ -391,7 +391,7 @@ function evaluateLayout() {
     layoutStatusEl.textContent = 'VALID — extended area used';
     layoutStatusEl.classList.add('warning');
   } else {
-    layoutStatusEl.textContent = 'VALID — all dies inside R = 60 mm';
+    layoutStatusEl.textContent = 'VALID — all dies inside R = 67 mm';
     layoutStatusEl.classList.add('valid');
   }
 }

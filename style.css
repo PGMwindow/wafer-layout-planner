@@ -268,10 +268,10 @@ button:disabled { opacity: .45; cursor: default; }
 
 .recommended-circle {
   position: absolute;
-  width: 80%;
-  height: 80%;
-  left: 10%;
-  top: 10%;
+  width: 89.333333%;
+  height: 89.333333%;
+  left: 5.333333%;
+  top: 5.333333%;
   border-radius: 50%;
   border: 2px dashed var(--cyan);
   background: rgba(43,179,192,.035);
@@ -305,7 +305,7 @@ button:disabled { opacity: .45; cursor: default; }
   border-radius: 6px;
 }
 
-.label-60 {
+.label-67 {
   left: 12%;
   top: 18%;
   color: #207f88;
