@@ -7,6 +7,7 @@ A simple browser-based wafer layout planner designed for GitHub Pages.
 - 9 rectangular dies: D1–D9
 - Independent width and height controls for every die
 - Drag dies from the tray onto the wafer
+- Move the selected, placed die with the arrow keys (tap for 0.5 mm, hold for fast 2 mm steps)
 - Snap die edges together when they are within 1 mm
 - Rotate the selected die in 90° steps
 - Recommended placement radius: 67 mm

@@ -3,6 +3,10 @@ const MAX_RADIUS_MM = 75;
 const RECOMMENDED_RADIUS_MM = 67;
 const DIE_COUNT = 9;
 const SNAP_DISTANCE_MM = 1;
+const KEYBOARD_NUDGE_MM = 0.5;
+const KEYBOARD_FAST_STEP_MM = 2;
+const KEYBOARD_HOLD_DELAY_MS = 300;
+const KEYBOARD_REPEAT_INTERVAL_MS = 50;
 
 const stage = document.getElementById('stage');
 const wafer = document.getElementById('wafer');
@@ -28,6 +32,14 @@ const defaultSizes = [
 let selectedId = null;
 let dragState = null;
 const dies = [];
+const keyboardMoves = new Map();
+
+const arrowDirections = {
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1]
+};
 
 function getWaferMetrics() {
   const stageRect = stage.getBoundingClientRect();
@@ -149,6 +161,7 @@ function renderAll() {
 }
 
 function selectDie(id) {
+  if (selectedId !== id) stopAllKeyboardMoves();
   selectedId = id;
   dies.forEach(d => d.el.classList.toggle('selected', d.id === id));
   rotateBtn.disabled = false;
@@ -177,6 +190,7 @@ function updateSelectedPanel() {
 
 function onPointerDown(e, die) {
   e.preventDefault();
+  stopAllKeyboardMoves();
   selectDie(die.id);
   die.el.setPointerCapture(e.pointerId);
 
@@ -277,6 +291,71 @@ function snapDieToNeighbors(die) {
 
   die.x = snappedX;
   die.y = snappedY;
+}
+
+function moveDieWithKeyboard(key, distanceMm, dieId) {
+  const die = dies.find(d => d.id === dieId);
+  if (!die || selectedId !== dieId || !die.placed || dragState) {
+    stopKeyboardMove(key);
+    return;
+  }
+
+  const [directionX, directionY] = arrowDirections[key];
+  const { pxPerMm } = getWaferMetrics();
+  die.x += directionX * distanceMm * pxPerMm;
+  die.y += directionY * distanceMm * pxPerMm;
+  snapDieToNeighbors(die);
+  renderDie(die);
+  evaluateLayout();
+  updateSelectedPanel();
+}
+
+function stopKeyboardMove(key) {
+  const movement = keyboardMoves.get(key);
+  if (!movement) return;
+  clearTimeout(movement.holdTimeout);
+  clearInterval(movement.repeatInterval);
+  keyboardMoves.delete(key);
+}
+
+function stopAllKeyboardMoves() {
+  [...keyboardMoves.keys()].forEach(stopKeyboardMove);
+}
+
+function isTypingTarget(target) {
+  return target instanceof Element && Boolean(
+    target.closest('input, textarea, select, button, [contenteditable]:not([contenteditable="false"])')
+  );
+}
+
+function onKeyboardMoveStart(e) {
+  if (!(e.key in arrowDirections) || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || isTypingTarget(e.target)) return;
+
+  const die = dies.find(d => d.id === selectedId);
+  if (!die?.placed || dragState) return;
+
+  e.preventDefault();
+  if (e.repeat || keyboardMoves.has(e.key)) return;
+
+  const movement = {
+    dieId: die.id,
+    holdTimeout: null,
+    repeatInterval: null
+  };
+
+  keyboardMoves.set(e.key, movement);
+  moveDieWithKeyboard(e.key, KEYBOARD_NUDGE_MM, die.id);
+  movement.holdTimeout = setTimeout(() => {
+    movement.repeatInterval = setInterval(() => {
+      moveDieWithKeyboard(e.key, KEYBOARD_FAST_STEP_MM, die.id);
+    }, KEYBOARD_REPEAT_INTERVAL_MS);
+  }, KEYBOARD_HOLD_DELAY_MS);
+}
+
+function onKeyboardMoveEnd(e) {
+  if (!keyboardMoves.has(e.key)) return;
+  e.preventDefault();
+  stopKeyboardMove(e.key);
 }
 
 function getDieCornersMm(die) {
@@ -408,6 +487,7 @@ rotateBtn.addEventListener('click', () => {
 sendToTrayBtn.addEventListener('click', () => {
   const die = dies.find(d => d.id === selectedId);
   if (!die) return;
+  stopAllKeyboardMoves();
   die.placed = false;
   arrangeTray();
   evaluateLayout();
@@ -415,6 +495,7 @@ sendToTrayBtn.addEventListener('click', () => {
 });
 
 resetAllBtn.addEventListener('click', () => {
+  stopAllKeyboardMoves();
   selectedId = null;
   rotateBtn.disabled = true;
   sendToTrayBtn.disabled = true;
@@ -445,6 +526,13 @@ window.addEventListener('resize', () => {
     evaluateLayout();
     updateSelectedPanel();
   }
+});
+
+window.addEventListener('keydown', onKeyboardMoveStart);
+window.addEventListener('keyup', onKeyboardMoveEnd);
+window.addEventListener('blur', stopAllKeyboardMoves);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stopAllKeyboardMoves();
 });
 
 initSettings();
