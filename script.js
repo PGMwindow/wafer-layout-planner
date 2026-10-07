@@ -213,10 +213,10 @@ function onPointerDown(e, die) {
 function onPointerMove(e) {
   if (!dragState || e.pointerId !== dragState.pointerId) return;
   const stageRect = stage.getBoundingClientRect();
-  dragState.die.x = e.clientX - stageRect.left - dragState.offsetX;
-  dragState.die.y = e.clientY - stageRect.top - dragState.offsetY;
-  dragState.die.placed = !pointInTray(dragState.die.x, dragState.die.y);
-  snapDieToNeighbors(dragState.die);
+  const targetX = e.clientX - stageRect.left - dragState.offsetX;
+  const targetY = e.clientY - stageRect.top - dragState.offsetY;
+  dragState.die.placed = !pointInTray(targetX, targetY);
+  moveDieTo(dragState.die, targetX, targetY);
   renderDie(dragState.die);
   evaluateLayout();
   updateSelectedPanel();
@@ -234,7 +234,6 @@ function onPointerUp(e) {
   if (!die.placed) {
     arrangeTray();
   } else {
-    snapDieToNeighbors(die);
     renderDie(die);
   }
 
@@ -248,49 +247,134 @@ function pointInTray(x, y) {
   return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
 }
 
-function snapDieToNeighbors(die) {
-  if (!die.placed) return;
-
-  const { pxPerMm } = getWaferMetrics();
-  const snapDistance = SNAP_DISTANCE_MM * pxPerMm;
+function getDieHalfExtentsPx(die, pxPerMm) {
   const rotated = die.rotation % 180 !== 0;
-  const halfWidth = (rotated ? die.height : die.width) * pxPerMm / 2;
-  const halfHeight = (rotated ? die.width : die.height) * pxPerMm / 2;
-  let bestX = snapDistance;
-  let bestY = snapDistance;
-  let snappedX = die.x;
-  let snappedY = die.y;
+  return {
+    x: (rotated ? die.height : die.width) * pxPerMm / 2,
+    y: (rotated ? die.width : die.height) * pxPerMm / 2
+  };
+}
+
+function positionsOverlap(die, x, y, other, pxPerMm) {
+  const half = getDieHalfExtentsPx(die, pxPerMm);
+  const otherHalf = getDieHalfExtentsPx(other, pxPerMm);
+  return Math.abs(x - other.x) < half.x + otherHalf.x - 1e-7 &&
+    Math.abs(y - other.y) < half.y + otherHalf.y - 1e-7;
+}
+
+function positionOverlapsAny(die, x, y, pxPerMm) {
+  return dies.some(other =>
+    other.placed && other.id !== die.id && positionsOverlap(die, x, y, other, pxPerMm)
+  );
+}
+
+function resolveAxisMovement(die, axis, start, target, fixedPosition, pxPerMm) {
+  const delta = target - start;
+  if (Math.abs(delta) < 1e-9) return start;
+
+  const half = getDieHalfExtentsPx(die, pxPerMm);
+  let resolved = target;
 
   dies.forEach(other => {
     if (!other.placed || other.id === die.id) return;
 
-    const otherRotated = other.rotation % 180 !== 0;
-    const combinedHalfWidth = halfWidth + (otherRotated ? other.height : other.width) * pxPerMm / 2;
-    const combinedHalfHeight = halfHeight + (otherRotated ? other.width : other.height) * pxPerMm / 2;
+    const otherHalf = getDieHalfExtentsPx(other, pxPerMm);
+    const crossAxis = axis === 'x' ? 'y' : 'x';
+    const otherAxisPosition = axis === 'x' ? other.x : other.y;
+    const otherCrossPosition = axis === 'x' ? other.y : other.x;
+    const crossHalf = half[crossAxis] + otherHalf[crossAxis];
+    if (Math.abs(fixedPosition - otherCrossPosition) >= crossHalf - 1e-7) return;
 
-    if (Math.abs(die.y - other.y) < combinedHalfHeight) {
-      for (const targetX of [other.x - combinedHalfWidth, other.x + combinedHalfWidth]) {
-        const distance = Math.abs(die.x - targetX);
-        if (distance < bestX) {
-          bestX = distance;
-          snappedX = targetX;
+    const combinedHalf = half[axis] + otherHalf[axis];
+    const currentlyOverlapping = Math.abs(start - otherAxisPosition) < combinedHalf - 1e-7;
+    if (currentlyOverlapping) {
+      const movingAway = start === otherAxisPosition ||
+        Math.sign(delta) === Math.sign(start - otherAxisPosition);
+      if (!movingAway) resolved = start;
+      return;
+    }
+
+    if (delta > 0) {
+      const contact = otherAxisPosition - combinedHalf;
+      if (start <= contact + 1e-7 && resolved > contact) resolved = Math.min(resolved, contact);
+    } else {
+      const contact = otherAxisPosition + combinedHalf;
+      if (start >= contact - 1e-7 && resolved < contact) resolved = Math.max(resolved, contact);
+    }
+  });
+
+  return resolved;
+}
+
+function findSnapTargets(die, startX, startY, x, y, pxPerMm) {
+  const snapDistance = SNAP_DISTANCE_MM * pxPerMm;
+  const half = getDieHalfExtentsPx(die, pxPerMm);
+  let bestX = null;
+  let bestY = null;
+
+  dies.forEach(other => {
+    if (!other.placed || other.id === die.id) return;
+    const otherHalf = getDieHalfExtentsPx(other, pxPerMm);
+
+    if (Math.abs(y - other.y) < half.y + otherHalf.y - 1e-7) {
+      for (const target of [other.x - half.x - otherHalf.x, other.x + half.x + otherHalf.x]) {
+        const distance = Math.abs(x - target);
+        const approached = distance < Math.abs(startX - target) - 1e-7;
+        if (approached && distance < snapDistance && (!bestX || distance < bestX.distance)) {
+          bestX = { value: target, distance };
         }
       }
     }
 
-    if (Math.abs(die.x - other.x) < combinedHalfWidth) {
-      for (const targetY of [other.y - combinedHalfHeight, other.y + combinedHalfHeight]) {
-        const distance = Math.abs(die.y - targetY);
-        if (distance < bestY) {
-          bestY = distance;
-          snappedY = targetY;
+    if (Math.abs(x - other.x) < half.x + otherHalf.x - 1e-7) {
+      for (const target of [other.y - half.y - otherHalf.y, other.y + half.y + otherHalf.y]) {
+        const distance = Math.abs(y - target);
+        const approached = distance < Math.abs(startY - target) - 1e-7;
+        if (approached && distance < snapDistance && (!bestY || distance < bestY.distance)) {
+          bestY = { value: target, distance };
         }
       }
     }
   });
 
-  die.x = snappedX;
-  die.y = snappedY;
+  return { bestX, bestY };
+}
+
+function applyValidSnap(die, startX, startY, x, y, pxPerMm) {
+  if (positionOverlapsAny(die, startX, startY, pxPerMm) || positionOverlapsAny(die, x, y, pxPerMm)) {
+    return { x, y };
+  }
+
+  const { bestX, bestY } = findSnapTargets(die, startX, startY, x, y, pxPerMm);
+  const candidates = [];
+  if (bestX && bestY) candidates.push({ x: bestX.value, y: bestY.value });
+
+  [
+    bestX && { x: bestX.value, y, distance: bestX.distance },
+    bestY && { x, y: bestY.value, distance: bestY.distance }
+  ]
+    .filter(Boolean)
+    .sort((a, b) => a.distance - b.distance)
+    .forEach(({ x: candidateX, y: candidateY }) => candidates.push({ x: candidateX, y: candidateY }));
+
+  return candidates.find(candidate => !positionOverlapsAny(die, candidate.x, candidate.y, pxPerMm)) || { x, y };
+}
+
+function moveDieTo(die, targetX, targetY) {
+  if (!die.placed) {
+    die.x = targetX;
+    die.y = targetY;
+    return;
+  }
+
+  const startX = die.x;
+  const startY = die.y;
+  const { pxPerMm } = getWaferMetrics();
+  const collisionSafeX = resolveAxisMovement(die, 'x', startX, targetX, startY, pxPerMm);
+  const collisionSafeY = resolveAxisMovement(die, 'y', startY, targetY, collisionSafeX, pxPerMm);
+  const snapped = applyValidSnap(die, startX, startY, collisionSafeX, collisionSafeY, pxPerMm);
+  die.x = snapped.x;
+  die.y = snapped.y;
 }
 
 function moveDieWithKeyboard(key, distanceMm, dieId) {
@@ -302,9 +386,11 @@ function moveDieWithKeyboard(key, distanceMm, dieId) {
 
   const [directionX, directionY] = arrowDirections[key];
   const { pxPerMm } = getWaferMetrics();
-  die.x += directionX * distanceMm * pxPerMm;
-  die.y += directionY * distanceMm * pxPerMm;
-  snapDieToNeighbors(die);
+  moveDieTo(
+    die,
+    die.x + directionX * distanceMm * pxPerMm,
+    die.y + directionY * distanceMm * pxPerMm
+  );
   renderDie(die);
   evaluateLayout();
   updateSelectedPanel();

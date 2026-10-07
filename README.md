@@ -9,6 +9,7 @@ A simple browser-based wafer layout planner designed for GitHub Pages.
 - Drag dies from the tray onto the wafer
 - Move the selected, placed die with the arrow keys (tap for 0.5 mm, hold for fast 2 mm steps)
 - Snap die edges together when they are within 1 mm
+- Stop dragged or keyboard-moved dies at neighboring die edges to prevent overlap
 - Rotate the selected die in 90° steps
 - Recommended placement radius: 67 mm
 - Maximum allowed radius: 75 mm
